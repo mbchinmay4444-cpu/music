@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SV Music — Spotify Web Cards</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg1: #e0eafc;   /* light blue */
+      --bg2: #cfdef3;   /* soft gradient */
+      --card: #161b22;  /* dark card */
+      --line: #30363d;
+      --text: #f5f7fa;
+      --muted: #a0a6b1;
+      --accent: #1db954; /* Spotify green */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, system-ui, sans-serif;
+      background: linear-gradient(135deg, var(--bg1), var(--bg2));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+    h1 { margin: 0 0 8px; font-size: 28px; color:#000; }
+    .sub { color: #333; font-size: 14px; margin-bottom: 16px; }
+    .bar {
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;
+    }
+    select, input, button {
+      background: #fff;
+      color: #000;
+      border: 1px solid #bbb;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    button { cursor: pointer; background: var(--accent); color: #fff; border: none; font-weight: 600; }
+    button:hover { filter: brightness(1.1); }
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .card {
+  background: #ffffff;          /* White cards */
+  border: 1px solid #d0d7de;    /* Soft gray border */
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform .12s ease, box-shadow .12s ease;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);  /* soft shadow */
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+}
+.title { color: #111; }   /* dark text */
+.meta  { color: #555; } 
+    .pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill {
+  background: #e8f5e9;        /* light green background */
+  color: #1db954;             /* Spotify green text */
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #c8e6c9;  /* soft green border */
+  font-weight: 600;
+}
+    .row { display: flex; gap: 8px; }
+    .row a, .row button.copyBtn {
+  text-decoration: none;
+  text-align: center;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid #d0d7de;
+  background: #f1f5f9;   /* light gray/blue background */
+  color: #111;           /* dark text */
+  flex: 1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.row a:hover, .row button.copyBtn:hover {
+  background: #1db954;   /* Spotify green hover */
+  color: #fff;
+  border-color: #1db954;
+}
+    /* Toast notification */
+    .toast {
+      position: fixed; bottom: 20px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent); color: #fff;
+      padding: 10px 16px; border-radius: 8px;
+      font-size: 14px; font-weight: 600;
+      opacity: 0; animation: fadeInOut 2s forwards;
+      z-index: 9999;
+    }
+    @keyframes fadeInOut {
+      0% { opacity: 0; }
+      10% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎧 Serivo Music </h1>
+    <div class="sub">Search → Listen The Music → Feel Refreshed </div>
+
+    <div class="bar">
+      <label for="lang" style="color: black; font-size: larger;">Language:</label>
+      <select id="lang">
+        <option value="hindi">Hindi</option>
+        <option value="english" selected>English</option>
+        <option value="kannada">Kannada</option>
+        <option value="tamil">Tamil</option>
+        <option value="telugu">Telugu</option>
+      </select>
+      <input id="q" placeholder="Song / artist / movie…" />
+      <button id="go">Search</button>
+    </div>
+
+    <div id="results" class="grid"></div>
+    <div id="empty" class="empty" style="display:none;">No results. Try another query.</div>
+  </div>
+
+  <script>
+    const API = "http://localhost:8080/api/search"; // backend
+
+    const $q = document.getElementById("q");
+    const $lang = document.getElementById("lang");
+    const $go = document.getElementById("go");
+    const $results = document.getElementById("results");
+    const $empty = document.getElementById("empty");
+
+    function escapeHtml(s){return (s||"").replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));}
+    function msToMin(ms){const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000).toString().padStart(2,"0"); return `${m}:${s}`;}
+
+    async function doSearch(){
+      const q = $q.value.trim();
+      if(!q){ $empty.style.display="block"; $results.innerHTML=""; return; }
+      $results.innerHTML = `<div class="empty">Searching…</div>`;
+      try {
+        const url = `${API}?q=${encodeURIComponent(q)}&lang=${encodeURIComponent($lang.value)}`;
+        const r = await fetch(url);
+        const data = await r.json();
+        if (!r.ok) {
+          $results.innerHTML = `<div class="empty">Error: ${data.error || r.status}</div>`;
+          return;
+        }
+        const items = data.results || [];
+        if (!items.length) {
+          $results.innerHTML = `<div class="empty">No matches on Spotify for “${q}”</div>`;
+          return;
+        }
+        render(items);
+      } catch (err) {
+        $results.innerHTML = `<div class="empty">Network error: ${err?.message || err}</div>`;
+      }
+    }
+
+    function render(items){
+      $results.innerHTML = "";
+      $empty.style.display = items.length ? "none" : "block";
+
+      items.forEach(t => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <img class="thumb" src="${t.image}" alt="">
+          <div class="title">${escapeHtml(t.title)}</div>
+          <div class="meta">${escapeHtml(t.artists)} • ${escapeHtml(t.album)} • ${msToMin(t.duration_ms||0)}</div>
+          <div class="pills"><span class="pill">Spotify</span><span class="pill">${($lang.value||"").toUpperCase()}</span></div>
+          <div class="row">
+            <a href="${t.url}" target="_blank" rel="noopener">Open</a>
+            <button class="copyBtn" data-url="${t.url}">Copy Link</button>
+          </div>
+        `;
+        $results.appendChild(card);
+      });
+
+      document.querySelectorAll(".copyBtn").forEach(btn => {
+        btn.onclick = () => {
+          const link = btn.dataset.url;
+          navigator.clipboard.writeText(link).then(() => {
+            showToast("Link copied!");
+          });
+        };
+      });
+    }
+
+    function showToast(msg){
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(()=> el.remove(), 2000);
+    }
+
+    $go.onclick = doSearch;
+    $q.addEventListener("keydown", e => { if(e.key === "Enter") doSearch(); });
+
+    // demo search
+    $q.value = "arijit singh"; doSearch();
+  </script>
+</body>
+</html>
